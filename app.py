@@ -21,6 +21,8 @@ from utils.audio     import speak
 
 try:
     from utils.voice import listen_once
+    import speech_recognition as _sr
+    _sr.Microphone()   # actually test if mic hardware is accessible
     VOICE_AVAILABLE = True
 except Exception:
     VOICE_AVAILABLE = False
