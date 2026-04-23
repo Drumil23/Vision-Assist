@@ -1,28 +1,16 @@
 """
 Conversational scene model — Gemini 2.5 Flash Lite
+Uses correct google-genai SDK types.Content format for multi-turn history.
 """
 
 import os
 import io
-from pathlib import Path
 from PIL import Image
 from google import genai
 from google.genai import types
-from dotenv import load_dotenv
 
-# load .env locally
-load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
-
-# also check Streamlit secrets (Streamlit Cloud deployment)
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-if not GEMINI_API_KEY:
-    try:
-        import streamlit as st
-        GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-    except Exception:
-        pass
-
-MODEL = "gemini-2.5-flash-lite"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")   # paste key here
+MODEL          = "gemini-2.5-flash-lite"
 
 SYSTEM_PROMPT = """\
 You are a real-time visual guide for a blind person. You can see through their \
@@ -41,7 +29,7 @@ How to respond:
 """
 
 _client     = None
-_history    = []
+_history    = []   # list of types.Content objects
 _last_frame = None
 
 
@@ -66,17 +54,26 @@ def set_frame(pil_image: Image.Image):
 
 
 def chat(user_message: str, pil_image: Image.Image = None) -> str:
-    """Send a user message with the current camera frame. Maintains history."""
+    """
+    Send a user message with the current camera frame.
+    Maintains full conversation history using proper SDK types.
+    """
     _load()
     global _history
 
-    frame = pil_image or _last_frame
-    parts = []
+    # build user parts — image first, then text
+    frame   = pil_image or _last_frame
+    parts   = []
     if frame is not None:
         parts.append(_img_part(frame))
     parts.append(types.Part.from_text(text=user_message))
 
-    _history.append(types.Content(role="user", parts=parts))
+    # append user turn using proper types.Content
+    _history.append(
+        types.Content(role="user", parts=parts)
+    )
+
+    # keep last 10 turns to stay within token limits
     trimmed = _history[-10:]
 
     try:
@@ -90,13 +87,19 @@ def chat(user_message: str, pil_image: Image.Image = None) -> str:
             ),
         )
         reply = response.text.strip()
-        _history.append(types.Content(
-            role="model",
-            parts=[types.Part.from_text(text=reply)],
-        ))
+
+        # append assistant turn
+        _history.append(
+            types.Content(
+                role="model",
+                parts=[types.Part.from_text(text=reply)],
+            )
+        )
         return reply
+
     except Exception as e:
         err = str(e)
+        # remove the failed user turn so history stays clean
         if _history and _history[-1].role == "user":
             _history.pop()
         if "429" in err:
@@ -107,7 +110,7 @@ def chat(user_message: str, pil_image: Image.Image = None) -> str:
 
 
 def background_describe(pil_image: Image.Image) -> str:
-    """Silent background scene check — does not touch conversation history."""
+    """Silent background scene check — doesn't touch conversation history."""
     _load()
     if pil_image is None:
         return ""
@@ -124,32 +127,6 @@ def background_describe(pil_image: Image.Image) -> str:
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.1,
                 max_output_tokens=60,
-            ),
-        )
-        return response.text.strip()
-    except Exception:
-        return ""
-
-
-def transcribe(audio_bytes: bytes, mime_type: str = "audio/wav") -> str:
-    """
-    Transcribe audio bytes using Gemini.
-    Works with browser mic audio — no pyaudio or ffmpeg needed.
-    """
-    _load()
-    try:
-        audio_part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
-        response   = _client.models.generate_content(
-            model    = MODEL,
-            contents = [
-                audio_part,
-                types.Part.from_text(
-                    text="Transcribe exactly what is spoken. Reply with only the transcribed text, nothing else."
-                ),
-            ],
-            config=types.GenerateContentConfig(
-                temperature=0.0,
-                max_output_tokens=100,
             ),
         )
         return response.text.strip()
