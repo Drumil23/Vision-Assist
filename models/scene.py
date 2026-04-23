@@ -8,8 +8,6 @@ import io
 from PIL import Image
 from google import genai
 from google.genai import types
-from dotenv import load_dotenv
-load_dotenv()
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL          = "gemini-2.5-flash-lite"

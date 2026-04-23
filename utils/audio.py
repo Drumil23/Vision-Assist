@@ -7,7 +7,9 @@ No pip install needed — it's built into every Mac.
 import subprocess
 import threading
 import queue
+import platform
 
+_IS_MAC = platform.system() == "Darwin"
 _q      = queue.Queue(maxsize=2)
 _proc   = None
 _lock   = threading.Lock()
@@ -38,8 +40,8 @@ _worker_thread.start()
 
 
 def speak(text: str) -> None:
-    """Queue text for speech. Drops stale queued items — always speaks latest."""
-    if not text or not text.strip():
+    """Queue text for speech. No-op on non-Mac (e.g. Streamlit Cloud)."""
+    if not _IS_MAC or not text or not text.strip():
         return
     # drain stale pending item
     while not _q.empty():
