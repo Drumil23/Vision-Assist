@@ -7,14 +7,27 @@ VisionAssist — Continuous real-time visual guide for the blind
 """
 
 import datetime
+import importlib
 import threading
 import time
 import cv2
-import av
 import numpy as np
 import streamlit as st
 import streamlit.components.v1 as components
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+
+WEBRTC_AVAILABLE = False
+try:
+    av = importlib.import_module("av")
+    _webrtc = importlib.import_module("streamlit_webrtc")
+    webrtc_streamer = _webrtc.webrtc_streamer
+    WebRtcMode = _webrtc.WebRtcMode
+    RTCConfiguration = _webrtc.RTCConfiguration
+    WEBRTC_AVAILABLE = True
+except Exception:
+    av = None
+    webrtc_streamer = None
+    WebRtcMode = None
+    RTCConfiguration = None
 
 from utils.inference import get_engine
 from utils.audio     import speak
@@ -262,31 +275,47 @@ with cam_col:
     st.markdown('<div class="live-badge"><div class="live-dot"></div>Live</div>',
                 unsafe_allow_html=True)
 
-    RTC_CONFIG = RTCConfiguration({"iceServers": [
-        {"urls": ["stun:stun.l.google.com:19302"]},
-        {"urls": ["stun:stun1.l.google.com:19302"]},
-    ]})
+    if WEBRTC_AVAILABLE:
+        RTC_CONFIG = RTCConfiguration({"iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {"urls": ["stun:stun1.l.google.com:19302"]},
+        ]})
 
-    class FrameCapture:
-        def __init__(self):
-            self._last = 0
-        def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-            img = frame.to_ndarray(format="bgr24")
-            now = time.time()
-            if now - self._last > 1.5:
-                engine.push_frame(img)
-                self._last = now
-            out = engine.annotated if (engine.annotated is not None and engine.query) else img
-            return av.VideoFrame.from_ndarray(out, format="bgr24")
+        class FrameCapture:
+            def __init__(self):
+                self._last = 0
 
-    webrtc_streamer(
-        key          = "visionassist-cam",
-        mode         = WebRtcMode.SENDRECV,
-        rtc_configuration = RTC_CONFIG,
-        video_frame_callback = FrameCapture().recv,
-        media_stream_constraints = {"video": {"width": 640, "height": 480}, "audio": False},
-        async_processing = True,
-    )
+            def recv(self, frame):
+                img = frame.to_ndarray(format="bgr24")
+                now = time.time()
+                if now - self._last > 1.5:
+                    engine.push_frame(img)
+                    self._last = now
+                out = engine.annotated if (engine.annotated is not None and engine.query) else img
+                return av.VideoFrame.from_ndarray(out, format="bgr24")
+
+        webrtc_streamer(
+            key="visionassist-cam",
+            mode=WebRtcMode.SENDRECV,
+            rtc_configuration=RTC_CONFIG,
+            video_frame_callback=FrameCapture().recv,
+            media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
+            async_processing=True,
+        )
+    else:
+        st.info("WebRTC extras are missing; using snapshot camera mode.")
+        camera_image = st.camera_input(
+            "Point camera at your surroundings",
+            key="browser_cam",
+            label_visibility="collapsed",
+        )
+        if camera_image is not None:
+            arr = np.frombuffer(camera_image.getvalue(), np.uint8)
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if frame is not None:
+                engine.push_frame(frame)
+                display = engine.annotated if (engine.annotated is not None and engine.query) else frame
+                st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB), width=660)
 
     st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
     engine.query = st.text_input(
