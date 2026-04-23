@@ -6,6 +6,8 @@ Run:
     streamlit run app.py
 """
 
+import platform
+import datetime
 import threading
 import cv2
 import numpy as np
@@ -13,7 +15,15 @@ import streamlit as st
 
 from utils.inference import get_engine
 from utils.audio     import speak
-from utils.voice     import listen_once
+
+# voice input only available locally
+try:
+    from utils.voice import listen_once
+    VOICE_AVAILABLE = True
+except Exception:
+    VOICE_AVAILABLE = False
+
+IS_CLOUD = not (platform.system() == "Darwin")
 
 # ── page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -217,7 +227,7 @@ def add_message(role: str, text: str):
 
 # ── singletons ─────────────────────────────────────────────────────────────────
 @st.cache_resource
-def get_camera():
+def get_local_camera():
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -274,7 +284,7 @@ with c1:
     typed_msg = st.text_input("msg", placeholder="Type a question or just press 🎙 to speak…", key="typed_input", label_visibility="collapsed")
 
 with c2:
-    mic_btn = st.button("🎙 Ask with voice", key="mic_btn")
+    mic_btn = st.button("🎙 Ask with voice", key="mic_btn", disabled=IS_CLOUD)
 
 with c3:
     send_btn = st.button("➤ Send", key="send_btn")
@@ -291,7 +301,7 @@ if send_btn and typed_msg.strip():
     st.session_state.processing = True
 
 # ── handle voice ───────────────────────────────────────────────────────────────
-if mic_btn and not st.session_state.listening:
+if mic_btn and not st.session_state.listening and VOICE_AVAILABLE:
     st.session_state.listening = True
     st.rerun()
 
