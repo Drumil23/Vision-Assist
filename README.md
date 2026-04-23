@@ -18,6 +18,8 @@ The system is built to prioritize safety and clarity. It warns about obstacles, 
 
 ## Demo Presentation, PPT and Research paper
 
+- Folder: https://drive.google.com/drive/folders/1KnQU7wo3lh0yIYt-IwTGL6j0KYGiFvY5?usp=sharing
+
 - Demo Presentation: https://youtu.be/QbfTVtVooHc
 
 - PPT link: https://drive.google.com/file/d/1XnB0hwRCF5RNAeV-BM9YIU8rglQxhNam/view?usp=sharing
