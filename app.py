@@ -249,6 +249,7 @@ def _on_proactive(text: str):
 
 engine.on_speak      = speak
 engine.on_ai_message = _on_proactive
+cap = get_local_camera()
 
 # flush any proactive messages into the main message list
 if st.session_state.pending_ai:
