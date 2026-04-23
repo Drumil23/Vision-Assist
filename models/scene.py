@@ -8,8 +8,10 @@ import io
 from PIL import Image
 from google import genai
 from google.genai import types
+from dotenv import load_dotenv
+load_dotenv()
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyCb3JeAj9FSrN1-wS7NPrkaD4qcEa6AACU")   # paste key here
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL          = "gemini-2.5-flash-lite"
 
 SYSTEM_PROMPT = """\
