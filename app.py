@@ -241,7 +241,6 @@ def get_cached_engine():
     # stored in a thread-safe list, picked up on next Streamlit rerun
     return eng
 
-cap    = get_camera()
 engine = get_cached_engine()
 
 # wire proactive callback — pushes to pending list, picked up below
