@@ -1,64 +1,64 @@
 """
-Speech output using macOS built-in 'say' command.
-Far more reliable than pyttsx3 in multi-threaded Streamlit apps.
-No pip install needed — it's built into every Mac.
+TTS via gTTS — works locally and on Streamlit Cloud.
+speak()       : queues audio bytes (thread-safe, callable from background threads)
+play_pending(): plays all queued audio via st.audio() — call from main thread only
 """
 
-import subprocess
-import threading
-import queue
+import io
 import platform
+import streamlit as st
 
-_IS_MAC = platform.system() == "Darwin"
-_q      = queue.Queue(maxsize=2)
-_proc   = None
-_lock   = threading.Lock()
+IS_MAC = platform.system() == "Darwin"
 
 
-def _worker():
-    global _proc
-    while True:
-        text = _q.get()
-        if text is None:
-            break
-        with _lock:
-            # kill any currently speaking process before starting new one
-            if _proc and _proc.poll() is None:
-                _proc.terminate()
-                _proc.wait()
-            _proc = subprocess.Popen(
-                ["say", "-r", "175", "-v", "Samantha", text],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            _proc.wait()
-        _q.task_done()
+def _make_mp3(text: str) -> bytes | None:
+    try:
+        from gtts import gTTS
+        buf = io.BytesIO()
+        gTTS(text=text.strip(), lang="en", slow=False).write_to_fp(buf)
+        return buf.getvalue()
+    except Exception:
+        return None
 
 
-_worker_thread = threading.Thread(target=_worker, daemon=True)
-_worker_thread.start()
+def _mac_say(text: str) -> None:
+    """Fallback: use macOS say command locally for instant playback."""
+    import subprocess
+    subprocess.Popen(
+        ["say", "-r", "175", "-v", "Samantha", text],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def speak(text: str) -> None:
-    """Queue text for speech. No-op on non-Mac (e.g. Streamlit Cloud)."""
-    if not _IS_MAC or not text or not text.strip():
+    """
+    Queue text for speech. Safe to call from any thread.
+    On Mac locally: speaks immediately via say command.
+    On Cloud: queues MP3 bytes for play_pending() to play on main thread.
+    """
+    if not text or not text.strip():
         return
-    # drain stale pending item
-    while not _q.empty():
-        try:
-            _q.get_nowait()
-            _q.task_done()
-        except queue.Empty:
-            break
-    try:
-        _q.put_nowait(text)
-    except queue.Full:
-        pass
+    if IS_MAC:
+        _mac_say(text)
+    else:
+        mp3 = _make_mp3(text)
+        if mp3:
+            if "pending_audio" not in st.session_state:
+                st.session_state.pending_audio = []
+            st.session_state.pending_audio.append(mp3)
 
 
-def stop():
-    """Immediately stop any current speech."""
-    global _proc
-    with _lock:
-        if _proc and _proc.poll() is None:
-            _proc.terminate()
+def play_pending() -> None:
+    """
+    Play all queued MP3 audio via st.audio(autoplay=True).
+    Must be called from the main Streamlit thread.
+    No-op on Mac (say command handles it directly).
+    """
+    if IS_MAC:
+        return
+    pending = st.session_state.get("pending_audio", [])
+    if pending:
+        for mp3 in pending:
+            st.audio(mp3, format="audio/mp3", autoplay=True)
+        st.session_state.pending_audio = []
