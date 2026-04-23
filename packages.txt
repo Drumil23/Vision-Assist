@@ -1,4 +1,2 @@
-portaudio19-dev
-espeak
 ffmpeg
 libsndfile1
