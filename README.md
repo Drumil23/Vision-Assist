@@ -16,9 +16,14 @@ VisionAssist uses live camera input, computer vision, OCR, object localization, 
 
 The system is built to prioritize safety and clarity. It warns about obstacles, reports nearby objects, reads visible text, and avoids overwhelming the user with unnecessary information.
 
-## Demo Videos and Data Sets
+## Demo Presentation and PPT
 
-- Demo video: 
+- Demo Presentation: https://youtu.be/QbfTVtVooHc
+
+- PPT link: https://drive.google.com/file/d/1XnB0hwRCF5RNAeV-BM9YIU8rglQxhNam/view?usp=sharing
+
+- PPT in PDF since not sure if you will be able to open .key file: https://drive.google.com/file/d/1fr5Fw4JxYUzohSzeF6j4xRE4mZNHTFJY/view?usp=sharing
+
 
 ## Key Features
 
