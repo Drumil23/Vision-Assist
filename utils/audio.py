@@ -1,64 +1,66 @@
 """
-Speech output using macOS built-in 'say' command.
-Far more reliable than pyttsx3 in multi-threaded Streamlit apps.
-No pip install needed — it's built into every Mac.
+TTS via gTTS. Returns MP3 bytes that can be played via st.audio().
+Thread-safe — does NOT call st.audio() directly.
+app.py calls play_pending() on the main Streamlit thread.
 """
 
-import subprocess
-import threading
-import queue
-import platform
-
-_IS_MAC = platform.system() == "Darwin"
-_q      = queue.Queue(maxsize=2)
-_proc   = None
-_lock   = threading.Lock()
+import io
+import streamlit as st
+from gtts import gTTS
 
 
-def _worker():
-    global _proc
-    while True:
-        text = _q.get()
-        if text is None:
-            break
-        with _lock:
-            # kill any currently speaking process before starting new one
-            if _proc and _proc.poll() is None:
-                _proc.terminate()
-                _proc.wait()
-            _proc = subprocess.Popen(
-                ["say", "-r", "175", "-v", "Samantha", text],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            _proc.wait()
-        _q.task_done()
-
-
-_worker_thread = threading.Thread(target=_worker, daemon=True)
-_worker_thread.start()
+def make_audio_bytes(text: str) -> bytes | None:
+    """Convert text to MP3 bytes. Returns None on failure."""
+    if not text or not text.strip():
+        return None
+    try:
+        buf = io.BytesIO()
+        gTTS(text=text.strip(), lang="en", slow=False).write_to_fp(buf)
+        return buf.getvalue()
+    except Exception:
+        return None
 
 
 def speak(text: str) -> None:
-    """Queue text for speech. No-op on non-Mac (e.g. Streamlit Cloud)."""
-    if not _IS_MAC or not text or not text.strip():
+    """
+    Queue audio for playback on the main thread.
+    Safe to call from background threads.
+    """
+    audio_bytes = make_audio_bytes(text)
+    if audio_bytes:
+        if "pending_audio" not in st.session_state:
+            st.session_state.pending_audio = []
+        st.session_state.pending_audio.append(audio_bytes)
+
+
+def play_pending() -> None:
+    """
+    Play all queued audio. Must be called from the main Streamlit thread.
+    """
+    pending = st.session_state.get("pending_audio", [])
+    if pending:
+        for audio_bytes in pending:
+            st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+        st.session_state.pending_audio = []
+"""
+Server-side TTS using gTTS.
+Saves audio to a BytesIO buffer and plays via st.audio(autoplay=True).
+Works on Streamlit Cloud — no pyaudio, no browser Speech API needed.
+"""
+
+import io
+import streamlit as st
+from gtts import gTTS
+
+
+def speak(text: str) -> None:
+    """Convert text to speech and autoplay in the browser."""
+    if not text or not text.strip():
         return
-    # drain stale pending item
-    while not _q.empty():
-        try:
-            _q.get_nowait()
-            _q.task_done()
-        except queue.Empty:
-            break
     try:
-        _q.put_nowait(text)
-    except queue.Full:
-        pass
-
-
-def stop():
-    """Immediately stop any current speech."""
-    global _proc
-    with _lock:
-        if _proc and _proc.poll() is None:
-            _proc.terminate()
+        buf = io.BytesIO()
+        gTTS(text=text.strip(), lang="en", slow=False).write_to_fp(buf)
+        buf.seek(0)
+        st.audio(buf, format="audio/mp3", autoplay=True)
+    except Exception:
+        pass  # never crash the app over audio

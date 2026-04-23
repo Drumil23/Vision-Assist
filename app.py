@@ -10,12 +10,11 @@ VisionAssist — Real-time AI guide for the visually impaired
 import datetime, threading, time, io
 import cv2, av, numpy as np
 import streamlit as st
-import streamlit.components.v1 as components
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 from streamlit_mic_recorder import mic_recorder
-import speech_recognition as sr
 
 from utils.inference import get_engine
+from utils.audio     import speak, play_pending
 
 # ── page config ────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="VisionAssist", page_icon="🦯",
@@ -124,6 +123,7 @@ for k, v in [
     ("messages", []),
     ("processing", False),
     ("pending_ai", []),
+    ("pending_audio", []),
     ("last_spoken", ""),
     ("muted", False),
 ]:
@@ -136,7 +136,7 @@ def ts():
 def add_and_speak(role: str, text: str):
     st.session_state.messages.append({"role": role, "text": text, "time": ts()})
     if role == "ai" and not st.session_state.muted:
-        speak(text)
+        speak(text)  # queues audio — played by play_pending() on next rerun
 
 # ── engine ─────────────────────────────────────────────────────────────────────
 @st.cache_resource
@@ -148,6 +148,10 @@ def get_cached_engine():
     return eng
 
 engine = get_cached_engine()
+
+# play any queued audio from background threads — must run on main thread
+if not st.session_state.muted:
+    play_pending()
 
 # flush proactive AI messages from background thread
 if st.session_state.pending_ai:
@@ -202,19 +206,16 @@ audio = mic_recorder(
     key="mic_rec",
 )
 if audio and audio.get("bytes"):
-    recognizer = sr.Recognizer()
-    try:
-        with sr.AudioFile(io.BytesIO(audio["bytes"])) as src:
-            audio_data = recognizer.record(src)
-        transcript = recognizer.recognize_google(audio_data)
-        if transcript.strip():
-            add_and_speak("user", transcript.strip())
-            st.session_state.processing = True
-            st.rerun()
-    except Exception:
+    from models.scene import transcribe
+    with st.spinner("Transcribing…"):
+        transcript = transcribe(audio["bytes"], mime_type="audio/wav")
+    if transcript.strip():
+        add_and_speak("user", transcript.strip())
+        st.session_state.processing = True
+        st.rerun()
+    else:
         st.session_state.messages.append(
             {"role": "system", "text": "Didn't catch that — try again", "time": ts()})
-
 # ── process AI reply ───────────────────────────────────────────────────────────
 if st.session_state.processing:
     st.session_state.processing = False
