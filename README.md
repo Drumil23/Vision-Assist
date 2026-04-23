@@ -29,7 +29,7 @@ The system is built to prioritize safety and clarity. It warns about obstacles, 
 - Research paper: https://docs.google.com/document/d/1pMmo6VMmVzkQVLv70e8A_TJIh2MyRMD8/edit?usp=sharing&ouid=114921771539241515547&rtpof=true&sd=true
 
 
-
+- Github repo link: https://github.com/Drumil23/Vision-Assist
 
 
 ## Key Features
